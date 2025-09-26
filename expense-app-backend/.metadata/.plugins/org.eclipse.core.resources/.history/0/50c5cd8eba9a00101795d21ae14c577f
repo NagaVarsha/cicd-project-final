@@ -1,0 +1,32 @@
+package com.example.expenseshare.model;
+
+import jakarta.persistence.*;
+import lombok.Data; // <-- Make sure this is imported
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Data // <-- THIS IS THE FIX
+@Entity
+@Table(name = "expenses")
+public class Expense {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String description;
+
+    private BigDecimal amount;
+
+    @ManyToOne
+    @JoinColumn(name = "paid_by_user_id")
+    private User paidBy;
+
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    // This links the expense to its individual shares
+    @OneToMany(mappedBy = "expense", cascade = CascadeType.ALL)
+    private List<ExpenseShare> shares;
+}

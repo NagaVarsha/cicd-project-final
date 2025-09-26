@@ -1,0 +1,107 @@
+package com.example.expenseshare.controller;
+
+import com.example.expenseshare.dto.CreateExpenseRequest;
+import com.example.expenseshare.model.Expense;
+import com.example.expenseshare.model.ExpenseShare;
+import com.example.expenseshare.model.User;
+import com.example.expenseshare.repository.ExpenseRepository;
+import com.example.expenseshare.repository.ExpenseShareRepository;
+import com.example.expenseshare.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * This controller handles all API requests related to expenses,
+ * such as creating new expenses and retrieving a user's expenses.
+ */
+@RestController
+@RequestMapping("/api")
+@CrossOrigin(origins = "http://localhost:5173")
+public class ExpenseController {
+
+    @Autowired
+    private ExpenseRepository expenseRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private ExpenseShareRepository expenseShareRepository;
+
+    /**
+     * Retrieves all expenses relevant to a specific user.
+     * It uses a custom query to find expenses where the user is either the payer
+     * or a participant in the share.
+     * @param userId The ID of the user whose expenses are being requested.
+     * @return A list of relevant expenses.
+     */
+    @GetMapping("/expenses")
+    public List<Expense> getAllExpenses(@RequestParam Long userId) {
+        return expenseRepository.findExpensesForUser(userId);
+    }
+
+    /**
+     * Creates a new expense and splits the amount among the participants.
+     * This method is transactional, meaning all database operations must succeed,
+     * or they will all be rolled back to prevent partial data.
+     * @param request The DTO containing the expense details from the frontend.
+     * @return The newly created Expense object.
+     */
+    @PostMapping("/expenses")
+    @Transactional
+    public ResponseEntity<Expense> createExpense(@RequestBody CreateExpenseRequest request) {
+        // Find the user who paid for the expense from the database
+        User paidBy = userRepository.findById(request.getPaidById())
+                .orElseThrow(() -> new RuntimeException("User who paid not found with id: " + request.getPaidById()));
+
+        // Create and save the main expense entity
+        Expense expense = new Expense();
+        expense.setDescription(request.getDescription());
+        expense.setAmount(request.getAmount());
+        expense.setPaidBy(paidBy);
+        Expense savedExpense = expenseRepository.save(expense);
+
+        // --- Splitting Logic ---
+        List<User> participants = new ArrayList<>();
+        participants.add(paidBy); // The payer is always a participant
+
+        // If the frontend sent a list of other users to share with, find them
+        if (request.getSharedWithIds() != null && !request.getSharedWithIds().isEmpty()) {
+            List<User> sharedWithUsers = userRepository.findAllById(request.getSharedWithIds());
+            participants.addAll(sharedWithUsers);
+        }
+        
+        // Remove duplicates to handle cases where the payer is also in the sharedWithIds list
+        List<User> distinctParticipants = participants.stream().distinct().toList();
+
+        int totalParticipants = distinctParticipants.size();
+        if (totalParticipants == 0) {
+            // This is a safeguard, though it should not happen with the current logic
+            throw new RuntimeException("Expense must have at least one participant.");
+        }
+
+        // Calculate the amount each person owes
+        BigDecimal shareAmount = request.getAmount().divide(new BigDecimal(totalParticipants), 2, RoundingMode.HALF_UP);
+
+        // Create a share record for each participant
+        List<ExpenseShare> shares = new ArrayList<>();
+        for (User participant : distinctParticipants) {
+            shares.add(new ExpenseShare(savedExpense, participant, shareAmount));
+        }
+
+        // Save all the share records to the database
+        expenseShareRepository.saveAll(shares);
+        savedExpense.setShares(shares);
+
+        return new ResponseEntity<>(savedExpense, HttpStatus.CREATED);
+    }
+}
+

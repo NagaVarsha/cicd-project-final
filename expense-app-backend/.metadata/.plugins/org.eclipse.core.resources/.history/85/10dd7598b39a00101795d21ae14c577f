@@ -1,0 +1,15 @@
+package com.example.expenseshare.controller;
+
+// ... all your other imports
+
+@RestController
+@RequestMapping("/api")
+@CrossOrigin(origins = "http://localhost:5173") // <-- ADD THIS LINE
+public class UserController {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    // ... your /register and /login methods ...
+
+}

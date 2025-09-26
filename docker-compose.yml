@@ -1,0 +1,43 @@
+services:
+  # The MySQL Database Service
+  db:
+    image: mysql:8.0
+    container_name: mysql-db
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'expense_sharing_db'
+      MYSQL_USER: 'your_mysql_username'
+      MYSQL_PASSWORD: 'your_mysql_password'
+      MYSQL_ROOT_PASSWORD: 'a_strong_root_password'
+    ports:
+      # THIS IS THE FIX: Map the container's port 3306 to your computer's port 3307.
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  # The Spring Boot Backend Service
+  backend-service:
+    build:
+      context: ./expense-app-backend
+      dockerfile: Dockerfile
+    container_name: backend-app
+    restart: always
+    ports:
+      - "8081:8081"
+    depends_on:
+      - db
+
+  # The React Frontend Service (with Nginx)
+  frontend-service:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend-app
+    restart: always
+    ports:
+      - "8088:80" # Keeping the frontend on our new port 8088
+    depends_on:
+      - backend-service
+
+volumes:
+  mysql-data:

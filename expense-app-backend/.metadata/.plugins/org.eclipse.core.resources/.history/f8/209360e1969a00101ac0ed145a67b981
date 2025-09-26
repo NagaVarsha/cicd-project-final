@@ -1,0 +1,18 @@
+package com.example.expenseshare.model;
+
+import java.util.List;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import lombok.Data;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Entity;
+
+@Data
+@Entity
+@Table(name = "expenses")
+public class Expense {
+    // ... id, description, amount, paidBy, createdAt fields ...
+
+    @OneToMany(mappedBy = "expense", cascade = CascadeType.ALL)
+    private List<ExpenseShare> shares; // <-- ADD THIS LINE
+}

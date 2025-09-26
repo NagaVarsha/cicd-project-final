@@ -1,0 +1,17 @@
+package com.example.expenseshare.dto;
+
+import lombok.Data;
+import java.math.BigDecimal;
+import java.util.List;
+
+/**
+ * This class is a Data Transfer Object (DTO). It defines the exact structure
+ * of the JSON data we expect from the frontend when creating a new expense.
+ */
+@Data
+public class CreateExpenseRequest {
+    private String description;
+    private BigDecimal amount;
+    private Long paidById;
+    private List<Long> sharedWithIds;
+}

@@ -1,0 +1,18 @@
+package com.example.expenseshare.repository;
+
+import com.example.expenseshare.model.Expense;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import java.util.List;
+
+public interface ExpenseRepository extends JpaRepository<Expense, Long> {
+
+    /**
+     * Finds all expenses where the given user is either the one who paid
+     * OR is a participant in the expense's shares.
+     * This ensures a user only sees expenses they are a part of.
+     */
+    @Query("SELECT e FROM Expense e WHERE e.paidBy.id = :userId OR e.id IN (SELECT s.expense.id FROM ExpenseShare s WHERE s.user.id = :userId)")
+    List<Expense> findExpensesForUser(@Param("userId") Long userId);
+}

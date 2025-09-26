@@ -1,0 +1,84 @@
+package com.example.expenseshare.controller;
+
+import com.example.expenseshare.model.Expense;
+import com.example.expenseshare.model.User;
+import com.example.expenseshare.model.ExpenseShare;
+import com.example.expenseshare.repository.ExpenseRepository;
+import com.example.expenseshare.repository.ExpenseShareRepository;
+import com.example.expenseshare.repository.UserRepository;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api")
+@CrossOrigin(origins = "http://localhost:5173")
+public class ExpenseController {
+
+    @Autowired
+    private ExpenseRepository expenseRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private ExpenseShareRepository expenseShareRepository;
+
+    @GetMapping("/expenses")
+    public List<Expense> getAllExpenses() {
+        return expenseRepository.findAll();
+    }
+
+    @PostMapping("/expenses")
+    @Transactional // Ensures this whole method completes or none of it does
+    public ResponseEntity<Expense> createExpense(@RequestBody Map<String, Object> payload) {
+        // Extract data from payload
+        String description = (String) payload.get("description");
+        BigDecimal amount = new BigDecimal(payload.get("amount").toString());
+        Long paidById = Long.valueOf(((Map<String, Object>) payload.get("paidBy")).get("id").toString());
+        List<Integer> sharedWithIdsInt = (List<Integer>) payload.get("sharedWithIds");
+        List<Long> sharedWithIds = sharedWithIdsInt.stream().map(Long::valueOf).toList();
+
+        // Find the user who paid
+        User paidBy = userRepository.findById(paidById)
+                .orElseThrow(() -> new RuntimeException("User who paid not found"));
+
+        // Create and save the main expense
+        Expense expense = new Expense();
+        expense.setDescription(description);
+        expense.setAmount(amount);
+        expense.setPaidBy(paidBy);
+        Expense savedExpense = expenseRepository.save(expense);
+
+        // --- Splitting Logic ---
+        List<User> participants = new ArrayList<>();
+        participants.add(paidBy); // The payer is always a participant
+        List<User> sharedWithUsers = userRepository.findAllById(sharedWithIds);
+        participants.addAll(sharedWithUsers);
+
+        // Remove duplicates
+        List<User> distinctParticipants = participants.stream().distinct().toList();
+
+        int totalParticipants = distinctParticipants.size();
+        BigDecimal shareAmount = amount.divide(new BigDecimal(totalParticipants), 2, RoundingMode.HALF_UP);
+
+        List<ExpenseShare> shares = new ArrayList<>();
+        for (User participant : distinctParticipants) {
+            shares.add(new ExpenseShare(savedExpense, participant, shareAmount));
+        }
+
+        expenseShareRepository.saveAll(shares);
+        savedExpense.setShares(shares);
+
+        return new ResponseEntity<>(savedExpense, HttpStatus.CREATED);
+    }
+}
